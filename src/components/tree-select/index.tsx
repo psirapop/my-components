@@ -369,7 +369,6 @@ const SelectTreeBreadcrumb: React.FC = () => {
                sx={{
                  minWidth: 'auto',
                  p: 0.5,
-                 borderRadius: '50%',
                  '&:hover': {
                    bgcolor: 'error.light',
                    color: 'error.dark'
@@ -399,7 +398,6 @@ const SelectTreeBreadcrumb: React.FC = () => {
              right: 0,
              mt: 1,
              zIndex: 1300,
-             borderRadius: 2,
              overflow: 'hidden',
              maxHeight: 400
            }}
@@ -442,7 +440,6 @@ const SelectTreeBreadcrumb: React.FC = () => {
                      minWidth: 'auto',
                      width: 40,
                      height: 40,
-                     borderRadius: '50%',
                      p: 0,
                      '&:hover': {
                        bgcolor: 'primary.50'
