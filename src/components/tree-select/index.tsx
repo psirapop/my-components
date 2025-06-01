@@ -5,7 +5,6 @@ import {
  TextField,
  Typography,
  Button,
- Chip,
  List,
  ListItem,
  ListItemButton,
@@ -13,8 +12,7 @@ import {
  InputAdornment,
  Breadcrumbs,
  Card,
- CardContent,
- Container
+ CardContent
 } from '@mui/material';
 import { Icon } from '@iconify/react';
 
@@ -266,9 +264,7 @@ const SelectTreeBreadcrumb: React.FC = () => {
    setSelectedLabel(item.label);
    setIsOpen(false);
    setSearchTerm('');
-   // Reset to root level
-   setCurrentPath([]);
-   setCurrentLevel(treeData);
+   // Don't reset to root level - keep current position for next time
  };
 
  // Clear selection
@@ -277,12 +273,44 @@ const SelectTreeBreadcrumb: React.FC = () => {
    setSelectedLabel('');
  };
 
- // Reset dropdown state when opening
+ // Navigate to selected item's position when opening
  const openDropdown = () => {
    setIsOpen(true);
-   setCurrentPath([]);
-   setCurrentLevel(treeData);
    setSearchTerm('');
+   
+   if (selectedValue) {
+     // Find the selected item and navigate to its position
+     const pathToSelected = findPathToSelectedItem(treeData, selectedValue);
+     if (pathToSelected) {
+       setCurrentPath(pathToSelected.path);
+       setCurrentLevel(pathToSelected.level);
+     }
+   } else {
+     // If no selection, start at root
+     setCurrentPath([]);
+     setCurrentLevel(treeData);
+   }
+ };
+
+ // Find path to selected item
+ const findPathToSelectedItem = (nodes: TreeNode[], targetValue: string): { path: PathItem[], level: TreeNode[] } | null => {
+   const findRecursive = (items: TreeNode[], currentPath: PathItem[]): { path: PathItem[], level: TreeNode[] } | null => {
+     for (const item of items) {
+       // If this is the selected item, return the current path and its parent level
+       if (item.value === targetValue) {
+         return { path: currentPath, level: items };
+       }
+       
+       // If item has children, search in them
+       if (item.children) {
+         const result = findRecursive(item.children, [...currentPath, { id: item.id, label: item.label }]);
+         if (result) return result;
+       }
+     }
+     return null;
+   };
+   
+   return findRecursive(nodes, []);
  };
 
  const filteredData = searchTerm 
@@ -290,7 +318,7 @@ const SelectTreeBreadcrumb: React.FC = () => {
    : filterCurrentLevel(currentLevel, searchTerm);
 
  return (
-   <Container maxWidth="sm" sx={{ py: 4 }}>
+   <Box maxWidth="sm" sx={{ py: 4, mx: 'auto', px: 3 }}>
      <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
        หมวดหมู่
      </Typography>
@@ -348,11 +376,11 @@ const SelectTreeBreadcrumb: React.FC = () => {
                  }
                }}
              >
-               <Icon icon="mdi:close" width={16} height={16} />
+               <Icon icon="eva:close-fill" width={16} height={16} />
              </Button>
            )}
            <Icon 
-             icon="mdi:chevron-right" 
+             icon="eva:arrow-ios-forward-fill" 
              width={20} 
              height={20} 
              color="primary.main"
@@ -388,7 +416,7 @@ const SelectTreeBreadcrumb: React.FC = () => {
                InputProps={{
                  startAdornment: (
                    <InputAdornment position="start">
-                     <Icon icon="mdi:magnify" width={20} height={20} />
+                     <Icon icon="solar:magnifer-linear" width={20} height={20} />
                    </InputAdornment>
                  )
                }}
@@ -405,23 +433,33 @@ const SelectTreeBreadcrumb: React.FC = () => {
            {/* Breadcrumb Navigation */}
            {currentPath.length > 0 && (
              <Box sx={{ p: 2, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
-               <Button
-                 startIcon={<Icon icon="mdi:chevron-left" />}
-                 onClick={navigateBack}
-                 size="small"
-                 variant="outlined"
-                 sx={{ mb: 1 }}
-               >
-                 ย้อนกลับ
-               </Button>
-               
-               <Breadcrumbs separator={<Icon icon="mdi:chevron-right" width={16} />}>
-                 {currentPath.map((pathItem) => (
-                   <Typography key={pathItem.id} variant="body2" color="text.secondary">
-                     {pathItem.label}
-                   </Typography>
-                 ))}
-               </Breadcrumbs>
+               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                 <Button
+                   onClick={navigateBack}
+                   variant="outlined"
+                   size="small"
+                   sx={{
+                     minWidth: 'auto',
+                     width: 40,
+                     height: 40,
+                     borderRadius: '50%',
+                     p: 0,
+                     '&:hover': {
+                       bgcolor: 'primary.50'
+                     }
+                   }}
+                 >
+                   <Icon icon="eva:arrow-back-fill" width={20} height={20} />
+                 </Button>
+                 
+                 <Breadcrumbs separator={<Icon icon="eva:arrow-ios-forward-fill" width={16} />} sx={{ flex: 1, ml: 2 }}>
+                   {currentPath.map((pathItem) => (
+                     <Typography key={pathItem.id} variant="body2" color="text.secondary">
+                       {pathItem.label}
+                     </Typography>
+                   ))}
+                 </Breadcrumbs>
+               </Box>
              </Box>
            )}
 
@@ -439,31 +477,9 @@ const SelectTreeBreadcrumb: React.FC = () => {
                            '&:hover': { bgcolor: 'primary.50' }
                          }}
                        >
-                         <ListItemText
+                         <ListItemText 
                            primary={item.label}
-                           secondary={
-                             item.parentInfo ? (
-                               <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                                 <Typography variant="caption" color="text.secondary">
-                                   {item.parentInfo.label}
-                                 </Typography>
-                                 <Chip 
-                                   label="หมวดหมู่หลัก" 
-                                   size="small" 
-                                   variant="outlined"
-                                   sx={{ height: 16 }}
-                                 />
-                               </Box>
-                             ) : (
-                               <Chip 
-                                 label="รายการหลัก" 
-                                 size="small" 
-                                 color="primary"
-                                 variant="outlined"
-                                 sx={{ height: 16 }}
-                               />
-                             )
-                           }
+                           secondary={item.parentInfo ? item.parentInfo.label : null}
                          />
                        </ListItemButton>
                      </ListItem>
@@ -476,66 +492,72 @@ const SelectTreeBreadcrumb: React.FC = () => {
                      return (
                        <ListItem key={item.id} disablePadding>
                          <Box sx={{ display: 'flex', width: '100%' }}>
-                           {/* Select Parent Button */}
-                           <ListItemButton
-                             onClick={() => handleItemSelect(item)}
-                             sx={{
-                               flex: 1,
-                               borderRight: hasChildren ? 1 : 0,
-                               borderColor: 'divider',
-                               '&:hover': { bgcolor: 'grey.100' }
-                             }}
-                           >
-                             <ListItemText 
-                               primary={item.label}
-                               primaryTypographyProps={{ fontWeight: 'medium' }}
-                             />
-                           </ListItemButton>
-
-                           {/* Navigate to Children Button */}
-                           {hasChildren && (
-                             <Button
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 navigateToChildren(item);
-                               }}
-                               variant="text"
-                               color="success"
-                               endIcon={<Icon icon="mdi:chevron-right" />}
+                           {hasChildren ? (
+                             // For items with children - horizontal layout
+                             <ListItemButton
+                               onClick={() => navigateToChildren(item)}
                                sx={{
-                                 minWidth: 140,
-                                 flexDirection: 'column',
-                                 py: 1.5,
-                                 '&:hover': {
-                                   bgcolor: 'success.50'
-                                 }
+                                 flex: 1,
+                                 display: 'flex',
+                                 alignItems: 'center',
+                                 p: 0,
+                                 '&:hover': { bgcolor: 'success.50' }
                                }}
                              >
-                               <Typography variant="body2" fontWeight="medium">
-                                 ดูหมวดย่อย
-                               </Typography>
-                               <Typography variant="caption" color="text.secondary">
-                                 ({item.children?.length || 0} รายการ)
-                               </Typography>
-                             </Button>
-                           )}
-                           
-                           {/* ถ้าไม่มี children ให้แสดง indicator */}
-                           {!hasChildren && (
-                             <Box sx={{ 
-                               minWidth: 140, 
-                               display: 'flex', 
-                               alignItems: 'center', 
-                               justifyContent: 'center',
-                               bgcolor: 'grey.50'
-                             }}>
-                               <Chip 
-                                 label="รายการสุดท้าย" 
-                                 size="small" 
-                                 variant="outlined"
-                                 color="default"
+                               {/* Select Parent Button - narrower width */}
+                               <Button
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   handleItemSelect(item);
+                                 }}
+                                 variant="text"
+                                 sx={{
+                                   justifyContent: 'flex-start',
+                                   textTransform: 'none',
+                                   fontWeight: 'medium',
+                                   fontSize: '1rem',
+                                   color: 'text.primary',
+                                   px: 2,
+                                   py: 1.5,
+                                   minWidth: 'fit-content',
+                                   maxWidth: '70%',
+                                   borderRadius: 0,
+                                   '&:hover': {
+                                     bgcolor: 'primary.50',
+                                     color: 'primary.main'
+                                   }
+                                 }}
+                               >
+                                 {item.label}
+                               </Button>
+
+                               {/* Navigate area - takes remaining space */}
+                               <Box sx={{ 
+                                 display: 'flex', 
+                                 alignItems: 'center',
+                                 justifyContent: 'flex-end',
+                                 px: 2,
+                                 py: 1.5,
+                                 flex: 1,
+                                 color: 'success.main'
+                               }}>
+                                 <Icon icon="eva:arrow-ios-forward-fill" width={20} height={20} />
+                               </Box>
+                             </ListItemButton>
+                           ) : (
+                             // For items without children - simple selection
+                             <ListItemButton
+                               onClick={() => handleItemSelect(item)}
+                               sx={{
+                                 flex: 1,
+                                 '&:hover': { bgcolor: 'grey.100' }
+                               }}
+                             >
+                               <ListItemText 
+                                 primary={item.label}
+                                 primaryTypographyProps={{ fontWeight: 'medium' }}
                                />
-                             </Box>
+                             </ListItemButton>
                            )}
                          </Box>
                        </ListItem>
@@ -545,7 +567,7 @@ const SelectTreeBreadcrumb: React.FC = () => {
                </List>
              ) : (
                <Box sx={{ p: 3, textAlign: 'center' }}>
-                 <Icon icon="mdi:magnify-remove-outline" width={48} height={48} color="grey.400" />
+                 <Icon icon="eva:search-outline" width={48} height={48} color="grey.400" />
                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                    ไม่พบรายการที่ค้นหา
                  </Typography>
@@ -574,7 +596,7 @@ const SelectTreeBreadcrumb: React.FC = () => {
          )}
        </CardContent>
      </Card>
-   </Container>
+   </Box>
  );
 };
 
