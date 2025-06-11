@@ -1,22 +1,25 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { Icon } from '@iconify/react';
+import React, { useRef, useState, useEffect } from 'react';
+
 import {
   Box,
-  Paper,
+  List,
+  Button,
+  ListItem,
   TextField,
   Typography,
-  Button,
-  List,
-  ListItem,
-  ListItemButton,
   ListItemText,
+  ListItemButton,
   InputAdornment,
-  Breadcrumbs,
-  Card,
-  CardContent
+  Paper,
+  Popper,
+  ClickAwayListener,
+  IconButton
 } from '@mui/material';
-import { Icon } from '@iconify/react';
-import { TreeNode, TreeNodeWithParent, PathItem, TreeSelectProps } from './types';
+
 import { sampleTreeData } from './data';
+
+import type { TreeNode, PathItem, TreeSelectProps, TreeNodeWithParent } from './types';
 
 /**
  * TreeSelect component with breadcrumb navigation
@@ -26,8 +29,8 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
   data = sampleTreeData,
   value = '',
   onChange,
-  placeholder = 'เลือกหมวดหมู่สินค้า',
-  title = 'หมวดหมู่'
+  placeholder = 'Select category',
+  popperProps
 }) => {
   // States
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -38,13 +41,13 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
   const [currentLevel, setCurrentLevel] = useState<TreeNode[]>(data);
 
   // Refs
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   // Update selected value when prop changes
   useEffect(() => {
     setSelectedValue(value);
   }, [value]);
-  
+
   // Find and set label for the selected value
   useEffect(() => {
     // Only search for label if we have a value and data
@@ -61,44 +64,34 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
         }
         return null;
       };
-      
+
       const label = findLabelForValue(data);
       if (label) setSelectedLabel(label);
     }
   }, [selectedValue, data]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setSearchTerm('');
-      }
-    };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Filter tree data with global search and show parent info
   const globalSearchResults = (nodes: TreeNode[], searchTerm: string): TreeNodeWithParent[] => {
     if (!searchTerm) return [];
 
     const results: TreeNodeWithParent[] = [];
-    
+    const searchTermLower = searchTerm.toLowerCase();
+
     const searchRecursive = (items: TreeNode[], parent: { id: number; label: string; value: string } | null = null) => {
       items.forEach(item => {
-        const itemMatches = item.label.toLowerCase().includes(searchTerm.toLowerCase());
-        
+        const itemMatches = item.label.toLowerCase().includes(searchTermLower);
+
         if (itemMatches) {
           results.push({
             ...item,
             parentInfo: parent || undefined
           });
         }
-        
+
         // Search in children
-        if (item.children) {
+        if (item.children && item.children.length > 0) {
           searchRecursive(item.children, {
             id: item.id,
             label: item.label,
@@ -107,7 +100,7 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
         }
       });
     };
-    
+
     searchRecursive(nodes);
     return results;
   };
@@ -115,8 +108,9 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
   // Filter current level data based on search
   const filterCurrentLevel = (items: TreeNode[], searchTerm: string): TreeNode[] => {
     if (!searchTerm) return items;
-    return items.filter(item => 
-      item.label.toLowerCase().includes(searchTerm.toLowerCase())
+    const searchTermLower = searchTerm.toLowerCase();
+    return items.filter(item =>
+      item.label.toLowerCase().includes(searchTermLower)
     );
   };
 
@@ -135,7 +129,7 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
       const newPath = [...currentPath];
       newPath.pop();
       setCurrentPath(newPath);
-      
+
       if (newPath.length === 0) {
         setCurrentLevel(data);
       } else {
@@ -153,13 +147,35 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
     }
   };
 
+  // Navigate to specific breadcrumb level
+  const navigateToBreadcrumb = (targetIndex: number) => {
+    // สร้าง path ใหม่โดยตัดจาก index ที่กด
+    const newPath = currentPath.slice(0, targetIndex + 1);
+    setCurrentPath(newPath);
+
+    // หา level data ที่ตรงกับ path ใหม่
+    if (newPath.length === 0) {
+      setCurrentLevel(data);
+    } else {
+      let levelData = data;
+      for (const pathItem of newPath) {
+        const parent = levelData.find(item => item.id === pathItem.id);
+        if (parent && parent.children) {
+          levelData = parent.children;
+        }
+      }
+      setCurrentLevel(levelData);
+    }
+    setSearchTerm('');
+  };
+
   // Handle item selection
   const handleItemSelect = (item: TreeNode | TreeNodeWithParent) => {
     setSelectedValue(item.value);
     setSelectedLabel(item.label);
     setIsOpen(false);
     setSearchTerm('');
-    
+
     // Call onChange callback if provided
     if (onChange) {
       onChange(item.value, item.label);
@@ -170,7 +186,7 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
   const clearSelection = () => {
     setSelectedValue('');
     setSelectedLabel('');
-    
+
     // Call onChange callback if provided
     if (onChange) {
       onChange('', '');
@@ -181,7 +197,7 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
   const openDropdown = () => {
     setIsOpen(true);
     setSearchTerm('');
-    
+
     if (selectedValue) {
       // Find the selected item and navigate to its position
       const pathToSelected = findPathToSelectedItem(data, selectedValue);
@@ -196,6 +212,12 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
     }
   };
 
+  // Handle close
+  const handleClose = () => {
+    setIsOpen(false);
+    setSearchTerm('');
+  };
+
   // Find path to selected item
   const findPathToSelectedItem = (nodes: TreeNode[], targetValue: string): { path: PathItem[], level: TreeNode[] } | null => {
     const findRecursive = (items: TreeNode[], currentPath: PathItem[]): { path: PathItem[], level: TreeNode[] } | null => {
@@ -204,7 +226,7 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
         if (item.value === targetValue) {
           return { path: currentPath, level: items };
         }
-        
+
         // If item has children, search in them
         if (item.children) {
           const result = findRecursive(item.children, [...currentPath, { id: item.id, label: item.label }]);
@@ -213,106 +235,123 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
       }
       return null;
     };
-    
+
     return findRecursive(nodes, []);
   };
 
-  const filteredData = searchTerm 
-    ? globalSearchResults(data, searchTerm)
-    : filterCurrentLevel(currentLevel, searchTerm);
+  // Calculate filtered data with proper type handling
+  const filteredData = React.useMemo(() => {
+    if (searchTerm) {
+      return globalSearchResults(data, searchTerm);
+    } else {
+      return filterCurrentLevel(currentLevel, searchTerm);
+    }
+  }, [searchTerm, data, currentLevel]);
+
+
 
   return (
-    <Box maxWidth="sm" sx={{ py: 4, mx: 'auto', px: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
-        {title}
-      </Typography>
-      
-      {/* Dropdown Container */}
-      <Box ref={dropdownRef} sx={{ position: 'relative' }}>
-        
-        {/* Selected Value Display / Trigger */}
-        <Paper
-          onClick={openDropdown}
-          elevation={2}
-          sx={{
-            p: 2,
-            cursor: 'pointer',
-            border: 2,
-            borderColor: 'primary.main',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              bgcolor: 'primary.50',
-              borderColor: 'primary.dark',
-              transform: 'translateY(-1px)',
-              boxShadow: 4
-            },
-            '&:active': {
-              transform: 'translateY(0)',
-              boxShadow: 2
+    <Box width="100%">
+      <Paper
+        ref={anchorRef}
+        onClick={openDropdown}
+        elevation={2}
+        sx={{
+          p: 1,
+          cursor: 'pointer',
+          border: 1,
+          borderColor: 'rgba(var(--palette-grey-500Channel) / 1)',
+          borderRadius: 'shape.borderRadius',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          height: '56px',
+          boxShadow: 'none',
+          '&:hover': {
+            borderColor: 'text.primary',
+            '& .clear-button': {
+              opacity: 1,
+              visibility: 'visible',
+              transform: 'scale(1)'
             }
-          }}
+          }
+        }}
+      >
+        <Typography
+          color={selectedLabel ? 'text.primary' : 'text.disabled'}
+          fontWeight="normal"
+          variant="body2"
+          pl={1}
         >
-          <Typography 
-            color={selectedLabel ? 'text.primary' : 'text.secondary'}
-            fontWeight={selectedLabel ? 'medium' : 'normal'}
-          >
-            {selectedLabel || placeholder}
-          </Typography>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {selectedValue && (
-              <Button
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearSelection();
-                }}
-                sx={{
-                  minWidth: 'auto',
-                  p: 0.5,
-                  '&:hover': {
-                    bgcolor: 'error.light',
-                    color: 'error.dark'
-                  }
-                }}
-              >
-                <Icon icon="eva:close-fill" width={16} height={16} />
-              </Button>
-            )}
-            <Icon 
-              icon="eva:arrow-ios-forward-fill" 
-              width={20} 
-              height={20} 
-              color="primary.main"
-            />
-          </Box>
-        </Paper>
+          {selectedLabel || placeholder}
+        </Typography>
 
-        {/* Dropdown Menu */}
-        {isOpen && (
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          {selectedValue && (
+            <IconButton
+              size="small"
+              className="clear-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                clearSelection();
+              }}
+              sx={{
+                opacity: 0,
+                visibility: 'hidden',
+                transform: 'scale(0.8)',
+                transition: 'all 0.2s ease-in-out'
+              }}
+            >
+              <Icon icon="eva:close-fill" width={20} height={20} />
+            </IconButton>
+          )}
+          <IconButton
+            size="small"
+          >
+            <Icon
+              icon={isOpen ? 'eva:arrow-ios-upward-fill' : 'eva:arrow-ios-downward-fill'}
+              width={20}
+              height={20}
+              style={{
+                transition: 'transform 0.2s ease',
+              }}
+            />
+          </IconButton>
+        </Box>
+      </Paper>
+
+      {/* Popper Dropdown */}
+      <Popper
+        open={isOpen}
+        anchorEl={anchorRef.current}
+        placement="bottom-start"
+        sx={{
+          zIndex: 1030,
+          width: anchorRef.current?.offsetWidth || '100%',
+          '& .MuiPaper-root': {
+            boxShadow: '0 8px 40px rgba(0,0,0,0.12)',
+            backgroundColor: 'transparent'
+          },
+          borderRadius: '10px',
+          backgroundColor: 'white',
+          ...popperProps?.sx
+        }}
+      >
+        <ClickAwayListener onClickAway={handleClose}>
           <Paper
             elevation={8}
             sx={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              mt: 1,
-              zIndex: 1300,
-              overflow: 'hidden',
-              maxHeight: 400
+              width: '100%',
+              maxHeight: 400,
+              overflow: 'hidden'
             }}
           >
-            
             {/* Search Input */}
             <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
               <TextField
                 fullWidth
                 size="small"
-                placeholder="ค้นหา..."
+                placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 InputProps={{
@@ -322,44 +361,82 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
                     </InputAdornment>
                   )
                 }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    '&:hover fieldset': {
-                      borderColor: 'primary.main'
-                    }
-                  }
-                }}
               />
             </Box>
 
-            {/* Breadcrumb Navigation */}
-            {currentPath.length > 0 && (
-              <Box sx={{ p: 2, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {/* Breadcrumb Navigation with Clickable Items */}
+            {!searchTerm && currentPath.length > 0 && (
+              <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Button
                     onClick={navigateBack}
                     variant="outlined"
                     size="small"
                     sx={{
                       minWidth: 'auto',
-                      width: 40,
-                      height: 40,
+                      width: 24,
+                      height: 24,
                       p: 0,
                       '&:hover': {
                         bgcolor: 'primary.50'
                       }
                     }}
                   >
-                    <Icon icon="eva:arrow-back-fill" width={20} height={20} />
+                    <Icon icon="eva:arrow-ios-back-fill" width={16} height={16} />
                   </Button>
-                  
-                  <Breadcrumbs separator={<Icon icon="eva:arrow-ios-forward-fill" width={16} />} sx={{ flex: 1, ml: 2 }}>
-                    {currentPath.map((pathItem) => (
-                      <Typography key={pathItem.id} variant="body2" color="text.secondary">
-                        {pathItem.label}
-                      </Typography>
+
+                  {/* Custom Breadcrumb with clickable items */}
+                  <Box sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flex: 1,
+                    ml: 1,
+                    gap: '2px'
+                  }}>
+                    {currentPath.map((pathItem, index) => (
+                      <React.Fragment key={pathItem.id}>
+                        {index === currentPath.length - 1 ? (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              fontSize: '0.875rem',
+                              px: 0.5
+                            }}
+                          >
+                            {pathItem.label}
+                          </Typography>
+                        ) : (
+                          <Button
+                            onClick={() => navigateToBreadcrumb(index)}
+                            variant="text"
+                            size="small"
+                            sx={{
+                              minWidth: 'auto',
+                              padding: '2px 4px',
+                              textTransform: 'none',
+                              fontSize: '0.875rem',
+                              fontWeight: 'normal',
+                              color: 'primary.main',
+                              '&:hover': {
+                                bgcolor: 'primary.50'
+                              }
+                            }}
+                          >
+                            {pathItem.label}
+                          </Button>
+                        )}
+                        {index < currentPath.length - 1 && (
+                          <Icon
+                            icon="eva:arrow-ios-forward-fill"
+                            width={12}
+                            height={12}
+                            style={{ color: '#9e9e9e' }}
+                          />
+                        )}
+                      </React.Fragment>
                     ))}
-                  </Breadcrumbs>
+                  </Box>
                 </Box>
               </Box>
             )}
@@ -370,26 +447,56 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
                 <List disablePadding>
                   {searchTerm ? (
                     // Global search results with parent info
-                    (filteredData as TreeNodeWithParent[]).map((item) => (
-                      <ListItem key={`search-${item.id}`} disablePadding>
-                        <ListItemButton
-                          onClick={() => handleItemSelect(item)}
-                          sx={{
-                            '&:hover': { bgcolor: 'primary.50' }
-                          }}
-                        >
-                          <ListItemText 
-                            primary={item.label}
-                            secondary={item.parentInfo ? item.parentInfo.label : null}
-                          />
-                        </ListItemButton>
-                      </ListItem>
-                    ))
+                    filteredData.map((item, index) => {
+                      const searchItem = item as TreeNodeWithParent;
+                      return (
+                        <ListItem key={`search-${searchItem.id}-${searchItem.parentInfo?.id || 'root'}-${index}`} disablePadding>
+                          <ListItemButton
+                            onClick={() => handleItemSelect(searchItem)}
+                            sx={{
+                              '&:hover': { bgcolor: 'primary.50' },
+                              m: .5,
+                              borderRadius: 1,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: 'medium',
+                                color: 'text.primary',
+                                fontSize: '0.875rem',
+                                flex: 1
+                              }}
+                            >
+                              {searchItem.label}
+                            </Typography>
+
+                            {searchItem.parentInfo && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  color: 'text.secondary',
+                                  fontSize: '0.75rem',
+                                  fontStyle: 'italic',
+                                  ml: 2
+                                }}
+                              >
+                                {searchItem.parentInfo.label}
+                              </Typography>
+                            )}
+                          </ListItemButton>
+                        </ListItem>
+                      );
+                    })
                   ) : (
                     // Normal navigation view
                     (filteredData as TreeNode[]).map((item) => {
                       const hasChildren = item.children && item.children.length > 0;
-                      
+                      const isSelected = item.value === selectedValue;
+
                       return (
                         <ListItem key={item.id} disablePadding>
                           <Box sx={{ display: 'flex', width: '100%' }}>
@@ -402,10 +509,13 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
                                   display: 'flex',
                                   alignItems: 'center',
                                   p: 0,
-                                  '&:hover': { bgcolor: 'success.50' }
+                                  m: .5,
+                                  borderRadius: 1,
+                                  '&:hover': { bgcolor: 'success.50' },
+                                  bgcolor: isSelected ? 'primary.50' : 'transparent'
                                 }}
                               >
-                                {/* Select Parent Button - narrower width */}
+                                {/* Select Parent Button */}
                                 <Button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -415,9 +525,8 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
                                   sx={{
                                     justifyContent: 'flex-start',
                                     textTransform: 'none',
-                                    fontWeight: 'medium',
-                                    fontSize: '1rem',
-                                    color: 'text.primary',
+                                    fontWeight: isSelected ? 'bold' : 'medium',
+                                    color: isSelected ? 'primary.main' : 'text.primary',
                                     px: 2,
                                     py: 1.5,
                                     minWidth: 'fit-content',
@@ -432,15 +541,14 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
                                   {item.label}
                                 </Button>
 
-                                {/* Navigate area - takes remaining space */}
-                                <Box sx={{ 
-                                  display: 'flex', 
+                                {/* Navigate area */}
+                                <Box sx={{
+                                  display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'flex-end',
                                   px: 2,
                                   py: 1.5,
                                   flex: 1,
-                                  color: 'success.main'
                                 }}>
                                   <Icon icon="eva:arrow-ios-forward-fill" width={20} height={20} />
                                 </Box>
@@ -451,13 +559,27 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
                                 onClick={() => handleItemSelect(item)}
                                 sx={{
                                   flex: 1,
-                                  '&:hover': { bgcolor: 'grey.100' }
+                                  m: .5,
+                                  borderRadius: 1,
+                                  py: 1.5,
+                                  '&:hover': { bgcolor: 'success.50' },
+                                  bgcolor: isSelected ? 'primary.50' : 'transparent'
                                 }}
                               >
-                                <ListItemText 
+                                <ListItemText
                                   primary={item.label}
-                                  primaryTypographyProps={{ fontWeight: 'medium' }}
+                                  primaryTypographyProps={{
+                                    color: isSelected ? 'primary.main' : 'text.primary',
+                                    fontSize: '0.875rem'
+                                  }}
                                 />
+                                {isSelected && (
+                                  <Icon
+                                    icon="eva:checkmark-circle-2-fill"
+                                    width={20}
+                                    height={20}
+                                  />
+                                )}
                               </ListItemButton>
                             )}
                           </Box>
@@ -468,37 +590,16 @@ const TreeSelect: React.FC<TreeSelectProps> = ({
                 </List>
               ) : (
                 <Box sx={{ p: 3, textAlign: 'center' }}>
-                  <Icon icon="eva:search-outline" width={48} height={48} color="grey.400" />
+                  <Icon icon="eva:search-outline" width={48} height={48} />
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    ไม่พบรายการที่ค้นหา
+                    No items found
                   </Typography>
                 </Box>
               )}
             </Box>
           </Paper>
-        )}
-      </Box>
-
-      {/* Selected Value Info - Only show if debugging is needed */}
-      {process.env.NODE_ENV === 'development' && (
-        <Card sx={{ mt: 3 }} elevation={1}>
-          <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Selected Value:
-            </Typography>
-            <Typography variant="h6" color="primary.main" gutterBottom>
-              {selectedValue || 'ยังไม่ได้เลือก'}
-            </Typography>
-            {selectedLabel && (
-              <>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Label: {selectedLabel}
-                </Typography>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+        </ClickAwayListener>
+      </Popper>
     </Box>
   );
 };
